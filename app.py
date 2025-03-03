@@ -84,14 +84,54 @@ def process_uploaded_pdf(pdf_file):
 # Extract skills section from resume
 def extract_skills_section(text):
     text = text.lower()
-    skills_patterns = [r"\bskills\b[:\n]", r"\btechnical skills\b[:\n]", r"\bkey skills\b[:\n]"]
+
+    skills_patterns = [
+        r"\bskills\b[:\n]",
+        r"\btechnical skills\b[:\n]",
+        r"\bkey skills\b[:\n]",
+        r"\bcore competencies\b[:\n]",
+        r"\bareas of expertise\b[:\n]",
+        r"\bprofessional skills\b[:\n]",
+        r"\bexpertise\b[:\n]",
+    ]
+
+    # Find the start of the skills section
     start_index = None
     for pattern in skills_patterns:
         match = re.search(pattern, text)
         if match:
             start_index = match.end()
             break
-    return text[start_index:].strip() if start_index else text
+
+    if start_index is None:
+        return text  # Return full text if no skills section is found
+
+    # Define patterns to stop extracting skills
+    stop_patterns = [
+        r"\nexperience",
+        r"\neducation",
+        r"\nprojects",
+        r"\ncertifications",
+        r"\nsummary",
+        r"\ncontact",
+        r"\npersonal details",
+        r"\nacademic details",
+        r"\nprofile summary",
+        r"\npositions of responsibility",
+        r"\nextra-curricular achievements",
+        r"\nsoft skills",
+        r"\nachievements",
+    ]
+    end_index = len(text)
+    for stop_pattern in stop_patterns:
+        stop_match = re.search(stop_pattern, text[start_index:])
+        if stop_match:
+            end_index = start_index + stop_match.start()
+            break
+
+    # Extract and return the skills section
+    skills_section = text[start_index:end_index].strip()
+    return skills_section
 
 # Match extracted skills to dataset-based skills
 def match_skills(skills_section, skill_list):
@@ -189,7 +229,7 @@ if pdf_file:
 
 # Step 4: Show Recommended Jobs in Blocks
 if "recommended_jobs" in st.session_state:
-    st.subheader("Get Recommended Job roles:")
+    st.subheader("Recommended Jobs:")
     cols = st.columns(3)
 
     for i, job in enumerate(st.session_state.recommended_jobs):
