@@ -26,6 +26,15 @@ nlp = spacy.load(model_name)
 # Load dataset
 df = pd.read_csv("final_dataset.csv")  
 
+# Load models
+try:
+    vectorizer = joblib.load('vectorizer.pkl')
+    student_model = tf.keras.models.load_model("student_model.h5")
+    encoder = joblib.load("label_encoder.pkl")
+except FileNotFoundError:
+    st.error("ML model files are missing.")
+    st.stop()
+
 # Extract all unique skills from dataset
 all_skills = set()
 for skills in df["Skills"].dropna():
@@ -148,10 +157,10 @@ def get_youtube_recommendations(skills_to_learn, num_recommendations=3):
 
 # Streamlit UI
 home_page()
-st.title("🚀 Smart Job Recommendation System")
+st.title("Smart Job Recommendation System")
 
 # Step 1: Upload Resume (Reset results if new resume uploaded)
-pdf_file = st.file_uploader("📄 Upload your Resume", type=["pdf"], on_change=reset_session)
+pdf_file = st.file_uploader("Upload your Resume", type=["pdf"], on_change=reset_session)
 if pdf_file:
     resume_text = process_uploaded_pdf(pdf_file)
 
@@ -162,25 +171,25 @@ if pdf_file:
 
     # Greeting Message
     if user_name:
-        st.subheader(f"👋 Hello, {user_name}!")
+        st.subheader(f"Hello, {user_name}!")
 
     # Step 2: Let Users Modify Extracted Skills
     if matched_skills:
-        st.subheader("✅ Extracted Skills (Edit if Needed):")
+        st.subheader("Extracted Skills (Edit if Needed):")
         selected_skills = st.multiselect("Modify Your Skills:", sorted(all_skills), default=matched_skills, on_change=reset_after_skills)
 
         if not selected_skills:
-            st.warning("⚠️ Please select at least one skill to proceed.")
+            st.warning("Please select at least one skill to proceed.")
         else:
             # Step 3: Button to Recommend Jobs
-            if st.button("🔍 Recommend Jobs"):
+            if st.button("Recommend Jobs"):
                 reset_after_jobs()
                 st.session_state.recommended_jobs = recommend_jobs(selected_skills)
                 st.session_state.selected_skills = selected_skills  
 
 # Step 4: Show Recommended Jobs in Blocks
 if "recommended_jobs" in st.session_state:
-    st.subheader("🎯 Recommended Jobs:")
+    st.subheader("Recommended Jobs:")
     cols = st.columns(3)
 
     for i, job in enumerate(st.session_state.recommended_jobs):
@@ -195,7 +204,7 @@ if "recommended_jobs" in st.session_state:
         if "missing_skills" not in st.session_state:
             st.session_state.missing_skills = find_missing_skills(st.session_state.selected_job, st.session_state.selected_skills)
 
-        st.subheader(f"📌 More Skills to Add for {st.session_state.selected_job}:")
+        st.subheader(f"More Skills to Add for {st.session_state.selected_job}:")
         skill_html = " ".join([f"<span style='background-color:#ffeb99; padding:5px; border-radius:5px; margin:2px;'>{skill}</span>" for skill in st.session_state.missing_skills])
         st.markdown(f"<div style='padding:10px;'>{skill_html}</div>", unsafe_allow_html=True)
 
@@ -206,7 +215,7 @@ if "recommended_jobs" in st.session_state:
             st.session_state.youtube_videos = get_youtube_recommendations(st.session_state.missing_skills, num_videos)
             st.session_state.num_videos = num_videos  
 
-        st.subheader("📺 YouTube Video Recommendations")
+        st.subheader("YouTube Video Recommendations")
         if st.session_state.youtube_videos:
             # Display videos in a grid format
             cols = st.columns(len(st.session_state.youtube_videos))
@@ -215,7 +224,7 @@ if "recommended_jobs" in st.session_state:
                     st.markdown(f"[![{video['title']}]({video['thumbnail']})]({video['url']})", unsafe_allow_html=True)
                     st.markdown(f"**{skill.capitalize()} - [{video['title']}]({video['url']})**")
         else:
-            st.warning("⚠️ No YouTube videos available.")
+            st.warning("No YouTube videos available.")
 
         # Chatbot Button
         chatbot_button()
