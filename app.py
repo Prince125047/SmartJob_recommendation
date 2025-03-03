@@ -189,7 +189,7 @@ if pdf_file:
 
 # Step 4: Show Recommended Jobs in Blocks
 if "recommended_jobs" in st.session_state:
-    st.subheader("Recommended Job roles:")
+    st.subheader("Get Recommended Job roles:")
     cols = st.columns(3)
 
     for i, job in enumerate(st.session_state.recommended_jobs):
