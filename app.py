@@ -32,14 +32,6 @@ all_skills = set()
 for skills in df["Skills"].dropna():
     all_skills.update([s.strip().lower() for s in skills.split(",")])
 
-# Extract model if not already extracted
-if not os.path.exists(model_extract_path):
-    with tarfile.open(model_tar_path, "r:gz") as tar:
-        tar.extractall()
-
-# Load the extracted model
-nlp = spacy.load(model_extract_path)
-
 # Home Page
 def home_page():
     try:
