@@ -19,7 +19,6 @@ def install_spacy_model(model_name):
         subprocess.run(
             ["python", "-m", "spacy", "download", model_name], check=True)
 
-
 model_name = "en_core_web_sm"
 install_spacy_model(model_name)
 nlp = spacy.load(model_name)
@@ -121,8 +120,8 @@ def find_missing_skills(job, user_skills):
     missing_skills = job_skills - user_skills_set
     return list(missing_skills)
 
-# Get API keys securely
-YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
+# Hardcoded YouTube API Key
+YOUTUBE_API_KEY = "AIzaSyDbvYU855ZHRzu4SmqZG9OpQKXDJNsOeU0"
 
 # Get YouTube Video Recommendations
 def get_youtube_recommendations(skills_to_learn, num_recommendations=3):
