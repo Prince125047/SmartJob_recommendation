@@ -12,7 +12,8 @@ import pandas as pd
 import streamlit as st
 from pdfminer.high_level import extract_text
 import io
-
+import subprocess
+import importlib.util
 # ===============================
 # Helper Functions
 # ===============================
