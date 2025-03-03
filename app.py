@@ -205,11 +205,17 @@ if "recommended_jobs" in st.session_state:
             st.session_state.missing_skills = find_missing_skills(st.session_state.selected_job, st.session_state.selected_skills)
 
         st.subheader(f"More Skills to Add for {st.session_state.selected_job}:")
-        skill_html = " ".join([f"<span style='background-color:#ffeb99; padding:5px; border-radius:5px; margin:2px;'>{skill}</span>" for skill in st.session_state.missing_skills])
-        st.markdown(f"<div style='padding:10px;'>{skill_html}</div>", unsafe_allow_html=True)
+         skill_html = " ".join([
+            f"<span style='background-color:#ffeb99; color:#000000; padding:5px; border-radius:5px; margin:2px;'>{skill}</span>" 
+            for skill in st.session_state.missing_skills
+        ])
+        st.markdown(
+        f"<div style='background-color:#2d2d2d; color:#ffffff; padding:10px; border-radius:10px;'>{skill_html}</div>", 
+        unsafe_allow_html=True
+        )
 
         # YouTube Video Slider
-        num_videos = st.slider("🎥 Select Number of Video Recommendations:", 1, 5, 3)
+        num_videos = st.slider("Select Number of Video Recommendations:", 1, 5, 3)
 
         if "youtube_videos" not in st.session_state or st.session_state.num_videos != num_videos:
             st.session_state.youtube_videos = get_youtube_recommendations(st.session_state.missing_skills, num_videos)
