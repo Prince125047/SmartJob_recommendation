@@ -222,14 +222,14 @@ if pdf_file:
             st.warning("Please select at least one skill to proceed.")
         else:
             # Step 3: Button to Recommend Jobs
-            if st.button("Recommend Jobs"):
+            if st.button("Get Recommend Job Roles"):
                 reset_after_jobs()
                 st.session_state.recommended_jobs = recommend_jobs(selected_skills)
                 st.session_state.selected_skills = selected_skills
 
 # Step 4: Show Recommended Jobs in Blocks
 if "recommended_jobs" in st.session_state:
-    st.subheader("Get Recommended Job Roles:")
+    st.subheader("Recommended Job Roles:")
     cols = st.columns(3)
 
     for i, job in enumerate(st.session_state.recommended_jobs):
@@ -246,7 +246,7 @@ if "recommended_jobs" in st.session_state:
                 st.session_state.selected_job, st.session_state.selected_skills
             )
 
-        st.subheader(f"More Skills to Add for {st.session_state.selected_job}:")
+        st.subheader(f"Additional Skills to Add for {st.session_state.selected_job}:")
         skill_html = " ".join([
             f"<span style='background-color:#ffeb99; color:#000000; padding:5px; border-radius:5px; margin:2px;'>{skill}</span>"
             for skill in st.session_state.missing_skills
@@ -257,7 +257,7 @@ if "recommended_jobs" in st.session_state:
         )
 
         # YouTube Video Slider
-        num_videos = st.slider("Select Number of Video Recommendations:", 1, 5, 3)
+        num_videos = st.slider("Select Number of Video Recommendations:", 1, 5, 2)
 
         if "youtube_videos" not in st.session_state or st.session_state.num_videos != num_videos:
             st.session_state.youtube_videos = get_youtube_recommendations(st.session_state.missing_skills, num_videos)
