@@ -14,13 +14,15 @@ import subprocess
 import importlib.util
 
 # Load models
-try:
-    vectorizer = joblib.load('vectorizer.pkl')
-    student_model = tf.keras.models.load_model("student_model.h5")
-    encoder = joblib.load("label_encoder.pkl")
-except FileNotFoundError:
-    st.error("ML model files are missing.")
-    st.stop()
+def install_spacy_model(model_name):
+    if not importlib.util.find_spec(model_name):
+        subprocess.run(
+            ["python", "-m", "spacy", "download", model_name], check=True)
+
+
+model_name = "en_core_web_sm"
+install_spacy_model(model_name)
+nlp = spacy.load(model_name)
 
 # Load dataset
 df = pd.read_csv("final_dataset.csv")  
