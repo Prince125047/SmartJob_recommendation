@@ -229,7 +229,7 @@ if pdf_file:
 
 # Step 4: Show Recommended Jobs in Blocks
 if "recommended_jobs" in st.session_state:
-    st.subheader("Recommended Jobs:")
+    st.subheader("Get Recommended Job Roles:")
     cols = st.columns(3)
 
     for i, job in enumerate(st.session_state.recommended_jobs):
@@ -239,7 +239,7 @@ if "recommended_jobs" in st.session_state:
                 st.session_state.selected_job = job
 
     if "selected_job" in st.session_state:
-        st.success(f"✔ Selected Job: {st.session_state.selected_job}")
+        st.success(f"Selected Job:  {st.session_state.selected_job}")
 
         if "missing_skills" not in st.session_state:
             st.session_state.missing_skills = find_missing_skills(
