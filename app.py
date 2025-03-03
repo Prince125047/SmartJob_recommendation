@@ -1,212 +1,53 @@
-import os
-import random
-import re
-import time
-import base64
-import pickle
-import requests
-import spacy
-import pdfplumber
-from PIL import Image
-import pandas as pd
 import streamlit as st
-from pdfminer.high_level import extract_text
+import numpy as np
+import joblib
+import spacy
+import pandas as pd
+import os
 import io
+import requests
+from pdfminer.high_level import extract_text
+import tensorflow as tf
+from PIL import Image
+import re
 import subprocess
 import importlib.util
 
-def install_spacy_model(model_name):
-    """Ensure SpaCy model is installed."""
-    if not spacy.util.is_package(model_name):
-        os.system(f"python -m spacy download {model_name}")
-
-# Install SpaCy model if not already installed
-install_spacy_model("en_core_web_sm")
-nlp = spacy.load("en_core_web_sm")
-
-# Initialize session state for page navigation
-if "page" not in st.session_state:
-    st.session_state.page = "home"
-
-def switch_page(new_page):
-    """Switch to a new page."""
-    st.session_state.page = new_page
-
-# Load ML models
+# Load models
 try:
-    with open('ml-models/vectorizer.pkl', 'rb') as f:
-        vectorizer = pickle.load(f)
-    with open('ml-models/job_recommendation.pkl', 'rb') as f:
-        job_recommendation_model = pickle.load(f)
+    vectorizer = joblib.load('vectorizer.pkl')
+    student_model = tf.keras.models.load_model("student_model.h5")
+    encoder = joblib.load("label_encoder.pkl")
 except FileNotFoundError:
-    st.error("ML model files are missing. Please upload `vectorizer.pkl` and `job_recommendation.pkl`.")
+    st.error("ML model files are missing.")
     st.stop()
 
-# Function to read PDF files
-def pdf_reader(file_path):
-    return extract_text(file_path)
+# Load dataset
+df = pd.read_csv("final_dataset.csv")  
 
-# Function to process uploaded PDF files
-def process_uploaded_pdf(pdf_file):
-    binary_buffer = io.BytesIO(pdf_file.read())
-    save_image_path = os.path.join("./Uploaded_Resumes", pdf_file.name)
-    os.makedirs("./Uploaded_Resumes", exist_ok=True)
-    with open(save_image_path, "wb") as f:
-        f.write(binary_buffer.getvalue())
-    resume_text = pdf_reader(save_image_path)
-    return resume_text, save_image_path
+# Extract all unique skills from dataset
+all_skills = set()
+for skills in df["Skills"].dropna():
+    all_skills.update([s.strip().lower() for s in skills.split(",")])
 
-# Function to display PDF in Streamlit
-def show_pdf(file_path):
-    with open(file_path, "rb") as f:
-        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
-    pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="700" height="1000" type="application/pdf"></iframe>'
-    st.markdown(pdf_display, unsafe_allow_html=True)
+# Extract model if not already extracted
+if not os.path.exists(model_extract_path):
+    with tarfile.open(model_tar_path, "r:gz") as tar:
+        tar.extractall()
 
-# Name Parsing Function
-def extract_name_with_font_info(file_path):
-    name_keywords = ["name:", "full name:", "applicant:", "candidate:"]
-    potential_names = []
+# Load the extracted model
+nlp = spacy.load(model_extract_path)
 
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            text_details = page.extract_words()
-            for word in text_details:
-                text = word["text"].strip()
-                font_size = word["size"]
-                font_name = word["fontname"]
-
-                if "bold" in font_name.lower() or font_size > 14:
-                    potential_names.append(text)
-                for keyword in name_keywords:
-                    if text.lower().startswith(keyword):
-                        name = text[len(keyword):].strip()
-                        if name and name[0].isupper():
-                            return name
-
-    if potential_names:
-        return " ".join(potential_names[:2])
-    return None
-
-def extract_name_from_resume(resume_text, file_path=None):
-    if file_path:
-        name_from_font = extract_name_with_font_info(file_path)
-        if name_from_font:
-            return name_from_font
-    lines = resume_text.split("\n")
-    name_keywords = ["name:", "full name:", "applicant:", "candidate:"]
-
-    def clean_text(text):
-        return text.strip().lower()
-    for line in lines[:10]:
-        line = line.strip()
-        for keyword in name_keywords:
-            if clean_text(line).startswith(keyword):
-                name = line[len(keyword):].strip()
-                if name and name[0].isupper():
-                    return name
-        if line and line[0].isupper() and len(line.split()) >= 2:
-            return line
-    return None
-
-# Extract Skills
-def extract_skills_section(text):
-    text = text.lower()
-
-    skills_patterns = [
-        r"\bskills\b[:\n]",
-        r"\btechnical skills\b[:\n]",
-        r"\bkey skills\b[:\n]",
-        r"\bcore competencies\b[:\n]",
-        r"\bareas of expertise\b[:\n]",
-        r"\bprofessional skills\b[:\n]",
-        r"\bexpertise\b[:\n]",
-    ]
-
-    start_index = None
-    for pattern in skills_patterns:
-        match = re.search(pattern, text)
-        if match:
-            start_index = match.end()
-            break
-
-    if start_index is None:
-        return text
-
-    stop_patterns = [
-        r"\nexperience",
-        r"\neducation",
-        r"\nprojects",
-        r"\ncertifications",
-        r"\nsummary",
-        r"\ncontact",
-        r"\npersonal details",
-        r"\nacademic details",
-        r"\nprofile summary",
-        r"\npositions of responsibility",
-        r"\nextra-curricular achievements",
-        r"\nsoft skills",
-        r"\nachievements",
-    ]
-    end_index = len(text)
-    for stop_pattern in stop_patterns:
-        stop_match = re.search(stop_pattern, text[start_index:])
-        if stop_match:
-            end_index = start_index + stop_match.start()
-            break
-
-    skills_section = text[start_index:end_index].strip()
-    return skills_section
-
-# Match Skills
-def match_skills(skills_section, skill_list):
-    if not skills_section:
-        return []
-
-    skills_found = []
-    for skill in skill_list:
-        if re.search(rf"\b{re.escape(skill)}\b", skills_section, re.IGNORECASE):
-            skills_found.append(skill)
-    return list(set(skills_found))
-
-# YouTube API Integration
-API_KEY = "AIzaSyDbvYU855ZHRzu4SmqZG9OpQKXDJNsOeU0"
-ALLOWED_CHANNELS = {
-    "FreeCodeCamp": "UC8butISFwT-Wl7EV0hUK0BQ",
-    "Chai with Code": "UCs6nmQViDpUw0nuIx9c_WvA"
-}
-
-def get_youtube_recommendations(skills_to_learn, num_recommendations=5):
-    recommendations = {}
-    selected_skills = skills_to_learn[:num_recommendations]
-
-    for skill in selected_skills:
-        for channel_name, channel_id in ALLOWED_CHANNELS.items():
-            query = f"{skill} tutorial for beginners"
-            url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={query}&maxResults=1&type=video&channelId={channel_id}&key={API_KEY}"
-
-            try:
-                response = requests.get(url).json()
-                if "items" in response and response["items"]:
-                    video_id = response["items"][0]["id"]["videoId"]
-                    video_title = response["items"][0]["snippet"]["title"]
-                    video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    recommendations[skill] = {
-                        "channel": channel_name,
-                        "title": video_title,
-                        "url": video_url
-                    }
-                    break
-            except Exception as e:
-                st.error(f"Error fetching YouTube recommendations: {e}")
-                continue
-
-    return recommendations
-
-# Course Recommender Function
-def course_recommender(course_list, no_of_reco=5):
-    random.shuffle(course_list)
-    return course_list[:no_of_reco]
+# Home Page
+def home_page():
+    try:
+        img = Image.open("logo2.png")
+        st.image(img, use_container_width=True)
+    except FileNotFoundError:
+        st.error(
+            "Logo file not found. Please ensure 'logo2.png' is placed in the './Logo/' folder."
+        )
+        st.stop()
 
 # Chatbot Button
 def chatbot_button():
@@ -217,127 +58,171 @@ def chatbot_button():
         unsafe_allow_html=True
     )
 
-# Home Page
-def home_page():
-    try:
-        img = Image.open("./Logo/logo2.png")
-        st.image(img, use_container_width=True)
-    except FileNotFoundError:
-        st.error("Logo file not found. Please ensure 'logo2.png' is placed in the './Logo/' folder.")
-        st.stop()
+# Function to reset session state when a new resume is uploaded
+def reset_session():
+    st.session_state.clear()
 
-    st.title("SMART JOB RECOMMENDATION MODEL")
-    st.markdown("Upload your resume and get smart recommendations.", unsafe_allow_html=True)
+# Function to reset jobs and everything after that when skills are edited
+def reset_after_skills():
+    keys_to_remove = ["recommended_jobs", "selected_job", "missing_skills", "youtube_videos", "num_videos"]
+    for key in keys_to_remove:
+        if key in st.session_state:
+            del st.session_state[key]
 
-    pdf_file = st.file_uploader("Choose your Resume", type=["pdf"])
-    if pdf_file is not None:
-        with st.spinner("Uploading and Processing your Resume..."):
-            time.sleep(2)
-            try:
-                resume_text, save_image_path = process_uploaded_pdf(pdf_file)
-            except Exception as e:
-                st.error(f"Error processing the uploaded file: {e}")
-                st.stop()
+# Function to reset steps after job selection
+def reset_after_jobs():
+    keys_to_remove = ["selected_job", "missing_skills", "youtube_videos", "num_videos"]
+    for key in keys_to_remove:
+        if key in st.session_state:
+            del st.session_state[key]
 
-            doc = nlp(resume_text)
-            email = None
-            mobile_number = None
+# Function to process uploaded PDF
+def process_uploaded_pdf(pdf_file):
+    binary_buffer = io.BytesIO(pdf_file.read())
+    resume_text = extract_text(binary_buffer)
+    return resume_text
 
-            for ent in doc.ents:
-                if ent.label_ == "EMAIL":
-                    email = ent.text
-                elif ent.label_ == "PHONE":
-                    mobile_number = ent.text
+# Extract skills section from resume
+def extract_skills_section(text):
+    text = text.lower()
+    skills_patterns = [r"\bskills\b[:\n]", r"\btechnical skills\b[:\n]", r"\bkey skills\b[:\n]"]
+    start_index = None
+    for pattern in skills_patterns:
+        match = re.search(pattern, text)
+        if match:
+            start_index = match.end()
+            break
+    return text[start_index:].strip() if start_index else text
 
-            # Extract skills section and match skills
-            skills_section = extract_skills_section(resume_text)
-            matched_skills = match_skills(skills_section, skill_list)
+# Match extracted skills to dataset-based skills
+def match_skills(skills_section, skill_list):
+    return [skill for skill in skill_list if re.search(rf"\b{re.escape(skill)}\b", skills_section, re.IGNORECASE)]
 
-            # Vectorize the matched skills
-            feature_vector = vectorizer.transform([" ".join(matched_skills)])
-            vectorized_skills = vectorizer.get_feature_names_out()
-            resume_skills = [skill for skill in vectorized_skills if feature_vector[0, vectorizer.vocabulary_[skill]] > 0]
+# Extract name from resume
+def extract_name(resume_text):
+    lines = resume_text.split("\n")
+    for line in lines[:5]:  
+        words = line.split()
+        if len(words) >= 2 and words[0][0].isupper() and words[1][0].isupper():
+            return line.strip()
+    return None
 
-        st.header("**Resume Analysis Results**")
+# Recommend 3 jobs using Student Model
+def recommend_jobs(user_skills):
+    user_vectorized = vectorizer.transform([" ".join(user_skills)]).toarray()
+    job_probs = student_model.predict(user_vectorized)
+    top_n_indices = np.argsort(job_probs[0])[::-1][:3]  
+    top_jobs = encoder.inverse_transform(top_n_indices)
+    return list(top_jobs)
 
-        # Match skills
-        st.subheader("**Your Skills**")
-        if matched_skills:
-            selected_skills = st.multiselect(
-                "Select/Deselect your skills:",
-                options=[skill.capitalize() for skill in matched_skills],
-                default=[skill.capitalize() for skill in matched_skills]
-            )
-            matched_skills = [skill.lower() for skill in selected_skills]
+# Recommend missing skills based on selected job
+def find_missing_skills(job, user_skills):
+    job_skills_list = df[df["Job"] == job]["Skills"].dropna().values
+    if len(job_skills_list) == 0:
+        return ["No skill data available"]
+    
+    job_skills = {skill.strip().lower() for skill in job_skills_list[0].split(",")}
+    user_skills_set = {skill.strip().lower() for skill in user_skills}
+    
+    missing_skills = job_skills - user_skills_set
+    return list(missing_skills)
 
-            if not matched_skills:
-                st.markdown("No skills selected.", unsafe_allow_html=True)
+# Get API keys securely
+YOUTUBE_API_KEY = st.secrets["youtube"]["api_key"]
+
+# Get YouTube Video Recommendations
+def get_youtube_recommendations(skills_to_learn, num_recommendations=3):
+    recommendations = {}
+    preferred_channels = ["freecodecamp", "Programming with Mosh", "Traversy Media", "CS Dojo"]
+    
+    for skill in skills_to_learn[:num_recommendations]:  
+        query = f'{skill} tutorial for beginners ({" OR ".join(preferred_channels)})'
+        url = f"https://www.googleapis.com/youtube/v3/search?part=snippet&q={query}&maxResults=1&type=video&key={YOUTUBE_API_KEY}"
+
+        response = requests.get(url).json()
+        if "items" in response and response["items"]:
+            video_id = response["items"][0]["id"]["videoId"]
+            video_title = response["items"][0]["snippet"]["title"]
+            thumbnail_url = response["items"][0]["snippet"]["thumbnails"]["medium"]["url"]
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+            recommendations[skill] = {
+                "title": video_title, "url": video_url, "thumbnail": thumbnail_url
+            }
+    
+    return recommendations
+
+
+# Streamlit UI
+home_page()
+st.title("🚀 Smart Job Recommendation System")
+
+# Step 1: Upload Resume (Reset results if new resume uploaded)
+pdf_file = st.file_uploader("📄 Upload your Resume", type=["pdf"], on_change=reset_session)
+if pdf_file:
+    resume_text = process_uploaded_pdf(pdf_file)
+
+    # Extract name & skills
+    user_name = extract_name(resume_text)
+    skills_section = extract_skills_section(resume_text)
+    matched_skills = match_skills(skills_section, all_skills)  
+
+    # Greeting Message
+    if user_name:
+        st.subheader(f"👋 Hello, {user_name}!")
+
+    # Step 2: Let Users Modify Extracted Skills
+    if matched_skills:
+        st.subheader("✅ Extracted Skills (Edit if Needed):")
+        selected_skills = st.multiselect("Modify Your Skills:", sorted(all_skills), default=matched_skills, on_change=reset_after_skills)
+
+        if not selected_skills:
+            st.warning("⚠️ Please select at least one skill to proceed.")
         else:
-            st.markdown("No skills detected.", unsafe_allow_html=True)
+            # Step 3: Button to Recommend Jobs
+            if st.button("🔍 Recommend Jobs"):
+                reset_after_jobs()
+                st.session_state.recommended_jobs = recommend_jobs(selected_skills)
+                st.session_state.selected_skills = selected_skills  
 
-        # Recommended Job Role
-        if matched_skills:
-            feature_vector = vectorizer.transform([" ".join(matched_skills)])
-            predicted_jobs = job_recommendation_model.predict(feature_vector)[0]
-            predicted_jobs_list = [job.strip() for job in predicted_jobs.split(",")]
+# Step 4: Show Recommended Jobs in Blocks
+if "recommended_jobs" in st.session_state:
+    st.subheader("🎯 Recommended Jobs:")
+    cols = st.columns(3)
+
+    for i, job in enumerate(st.session_state.recommended_jobs):
+        with cols[i]:
+            if st.button(job, key=job):
+                reset_after_jobs()
+                st.session_state.selected_job = job  
+
+    if "selected_job" in st.session_state:
+        st.success(f"✔ Selected Job: {st.session_state.selected_job}")
+
+        if "missing_skills" not in st.session_state:
+            st.session_state.missing_skills = find_missing_skills(st.session_state.selected_job, st.session_state.selected_skills)
+
+        st.subheader(f"📌 More Skills to Add for {st.session_state.selected_job}:")
+        skill_html = " ".join([f"<span style='background-color:#ffeb99; padding:5px; border-radius:5px; margin:2px;'>{skill}</span>" for skill in st.session_state.missing_skills])
+        st.markdown(f"<div style='padding:10px;'>{skill_html}</div>", unsafe_allow_html=True)
+
+        # YouTube Video Slider
+        num_videos = st.slider("🎥 Select Number of Video Recommendations:", 1, 5, 3)
+
+        if "youtube_videos" not in st.session_state or st.session_state.num_videos != num_videos:
+            st.session_state.youtube_videos = get_youtube_recommendations(st.session_state.missing_skills, num_videos)
+            st.session_state.num_videos = num_videos  
+
+        st.subheader("📺 YouTube Video Recommendations")
+        if st.session_state.youtube_videos:
+            # Display videos in a grid format
+            cols = st.columns(len(st.session_state.youtube_videos))
+            for i, (skill, video) in enumerate(st.session_state.youtube_videos.items()):
+                with cols[i % len(cols)]:  # Use modulo to wrap around columns
+                    st.markdown(f"[![{video['title']}]({video['thumbnail']})]({video['url']})", unsafe_allow_html=True)
+                    st.markdown(f"**{skill.capitalize()} - [{video['title']}]({video['url']})**")
         else:
-            predicted_jobs_list = []
+            st.warning("⚠️ No YouTube videos available.")
 
-        st.subheader("**Recommended Job Role (ML Model)**")
-        if predicted_jobs_list:
-            st.markdown(
-                f"Predicted Job Role: {predicted_jobs_list[0]}",
-                unsafe_allow_html=True
-            )
-        else:
-            st.markdown("No job roles predicted.", unsafe_allow_html=True)
-
-        # Recommended Additional Skills
-        st.subheader("**Recommended Additional Skills (ML Model)**")
-        all_skills = set(vectorized_skills)
-        skills_to_learn = list(all_skills - set(resume_skills))
-        num_skills_to_learn = min(len(skills_to_learn), 5)
-        if skills_to_learn:
-            skill_boxes = "".join(
-                [f"✅ {skill.capitalize()}     " for skill in skills_to_learn[:num_skills_to_learn]]
-            )
-            st.markdown(skill_boxes, unsafe_allow_html=True)
-        else:
-            st.markdown("No additional skills recommended.", unsafe_allow_html=True)
-
-        # YouTube Video Recommendations
-        st.subheader("**YouTube Video Recommendations**")
-        no_of_reco = st.slider("Choose Number of Video Recommendations:", 1, 5, 2)
-
-        if skills_to_learn:
-            videos = get_youtube_recommendations(skills_to_learn, no_of_reco)
-            for skill, video in videos.items():
-                st.markdown(
-                    f"**{skill.capitalize()} ({video['channel']}):** [{video['title']}]({video['url']})",
-                    unsafe_allow_html=True
-                )
-        else:
-            st.markdown("No skills to recommend videos for.", unsafe_allow_html=True)
-
-        # Course Recommendations
-        st.subheader("**Courses & Certificates Recommendations 🎓**")
-        no_of_reco = st.slider("Choose Number of Course Recommendations:", 1, 5, 2)
-
-        all_courses = (
-            ds_course + web_course + android_course + ios_course + uiux_course +
-            mern_course + graphics_course + video_editing_course +
-            digital_marketing_course + copywriting_course + sales_course +
-            project_management_course + forex_trading_course + foreign_language_course +
-            dropshipping_course + digital_marketing_course + funnel_design_course +
-            influencer_marketing_course
-        )
-        recommended_courses = course_recommender(all_courses, no_of_reco)
-        for i, (c_name, c_link) in enumerate(recommended_courses, start=1):
-            st.markdown(f"🎓 [{c_name}]({c_link})", unsafe_allow_html=True)
-
-    chatbot_button()
-
-# Main Execution
-if __name__ == "__main__":
-    if st.session_state.page == "home":
-        home_page()
+        # Chatbot Button
+        chatbot_button()
