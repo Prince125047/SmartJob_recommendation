@@ -14,9 +14,6 @@ from pdfminer.high_level import extract_text
 import io
 import subprocess
 import importlib.util
-# ===============================
-# Helper Functions
-# ===============================
 
 def install_spacy_model(model_name):
     """Ensure SpaCy model is installed."""
